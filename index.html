@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Memory Card Game</title>
     <style>
+        /* Basic styling for the body, game container, and cards */
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
@@ -55,7 +56,7 @@
 
         .card.matched {
             background-color: #2e7d32;
-            pointer-events: none;
+            pointer-events: none; /* Disable clicks on matched cards */
         }
 
         .card .front,
@@ -129,43 +130,47 @@
     </style>
 
     <script type="module">
+        // Firebase imports for real-time database functionalities
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
         import { getDatabase, ref, set, get, onValue, update } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 
+        // Firebase configuration object
         const firebaseConfig = {
-            apiKey: "AIzaSyAoyLo0Cf3VfUi0uqqAYWanJQEC0b-JUO4",
-            authDomain: "okmew-72293.firebaseapp.com",
-            databaseURL: "https://okmew-72293-default-rtdb.europe-west1.firebasedatabase.app",
-            projectId: "okmew-72293",
-            storageBucket: "okmew-72293.appspot.com",
-            messagingSenderId: "329786787304",
-            appId: "1:329786787304:web:b71057df20e1d3079f505d"
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT_ID.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
         };
 
+        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const database = getDatabase(app);
 
+        // Array of icons for the cards
         const gameIcons = ['🐶', '🐱', '🐴', '🐟', '🕷️', '🐸', '🦛', '🦜'];
 
+        // Game variables
         let gameId;
-        let playerNumber;
         let currentPlayer = 1;
         let firstCard = null;
         let secondCard = null;
         let lockBoard = false;
         let gameStarted = false;
 
-        const gameContainer = document.getElementById('game-container');
+        // DOM elements
         const gameBoard = document.getElementById('game-board');
         const turnIndicator = document.getElementById('turn-indicator');
         const player1ScoreElement = document.getElementById('player1-score');
         const player2ScoreElement = document.getElementById('player2-score');
         const createGameBtn = document.getElementById('create-game-btn');
         const joinGameBtn = document.getElementById('join-game-btn');
-        const startGameBtn = document.getElementById('start-game-btn');
         const resetGameBtn = document.getElementById('reset-game-btn');
         const gameIdInput = document.getElementById('game-id-input');
 
+        // Shuffle function to randomize the icons
         function shuffle(array) {
             for (let i = array.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
@@ -173,11 +178,16 @@
             }
         }
 
+        // Create and display the game board
         function createBoard() {
             shuffle(gameIcons);
             gameBoard.innerHTML = '';
 
-            gameIcons.forEach((icon, index) => {
+            // Duplicate icons to create pairs
+            const cards = [...gameIcons, ...gameIcons];
+            shuffle(cards); // Shuffle the cards
+
+            cards.forEach((icon, index) => {
                 const card = document.createElement('div');
                 card.classList.add('card');
                 card.dataset.index = index;
@@ -185,7 +195,7 @@
 
                 const front = document.createElement('div');
                 front.classList.add('front');
-                front.textContent = '🐶';
+                front.textContent = '❓'; // Default front face
 
                 const back = document.createElement('div');
                 back.classList.add('back');
@@ -193,34 +203,38 @@
 
                 card.appendChild(front);
                 card.appendChild(back);
-                card.addEventListener('click', () => flipCard(card));
+                card.addEventListener('click', () => flipCard(card)); // Add click event for flipping the card
                 gameBoard.appendChild(card);
             });
         }
 
+        // Handle the flipping of cards
         function flipCard(card) {
             if (lockBoard || card.classList.contains('flipped') || card.classList.contains('matched')) return;
 
-            // Disable all other cards during the flip animation
+            // Lock the board to prevent multiple flips
             lockBoard = true;
 
-            card.classList.add('flipped');
+            card.classList.add('flipped'); // Mark card as flipped
             card.querySelector('.front').style.transform = 'rotateY(180deg)';
             card.querySelector('.back').style.transform = 'rotateY(0deg)';
 
             // Update the game state in the database
             updateGameState(card);
 
+            // If this is the first card, set it and unlock the board
             if (!firstCard) {
                 firstCard = card;
                 lockBoard = false;
                 return;
             }
 
+            // If this is the second card, check for a match
             secondCard = card;
             checkForMatch();
         }
 
+        // Update the game state in Firebase
         function updateGameState(card) {
             const gameRef = ref(database, `/games/${gameId}/cards`);
             const cardIndex = card.dataset.index;
@@ -231,161 +245,184 @@
                 }
             };
 
+            // Update the card's flipped status in the database
             update(gameRef, updatedCards).then(() => {
-                // Unlock the board after the update is complete
+                // Unlock the board after updating
                 lockBoard = false;
             });
         }
 
+        // Check if the two flipped cards match
         function checkForMatch() {
             if (firstCard.dataset.icon === secondCard.dataset.icon) {
-                matchCards(firstCard, secondCard);
-                updateScore();
-                resetBoard();
+                matchCards(firstCard, secondCard); // If matched, mark them
+                updateScore(); // Update the score
+                resetBoard(); // Reset the board for the next turn
             } else {
+                // If not matched, flip them back after a delay
                 setTimeout(() => {
                     unflipCards(firstCard, secondCard);
                     resetBoard();
                 }, 1000);
             }
 
-            switchPlayer();
+            switchPlayer(); // Switch to the next player
         }
 
+        // Mark cards as matched
         function matchCards(card1, card2) {
             card1.classList.add('matched');
             card2.classList.add('matched');
-            card1.style.pointerEvents = 'none';
-            card2.style.pointerEvents = 'none';
+            card1.style.pointerEvents = 'none'; // Disable further clicks
+            card2.style.pointerEvents = 'none'; // Disable further clicks
         }
 
+        // Unflip
+        // Unflip the cards if they don't match
         function unflipCards(card1, card2) {
             card1.classList.remove('flipped');
             card2.classList.remove('flipped');
+
+            // Reset the front and back face rotation
             card1.querySelector('.front').style.transform = 'rotateY(0deg)';
             card1.querySelector('.back').style.transform = 'rotateY(180deg)';
             card2.querySelector('.front').style.transform = 'rotateY(0deg)';
             card2.querySelector('.back').style.transform = 'rotateY(180deg)';
         }
 
-        function updateScore() {
-            const scoreRef = ref(database, `/games/${gameId}/scores`);
-            get(scoreRef).then((snapshot) => {
-                if (snapshot.exists()) {
-                    let scores = snapshot.val();
-                    scores[currentPlayer] += 1;
-                    update(scoreRef, scores);
-                    updateScoreElements(scores);
-                }
-            });
-        }
-
-        function updateScoreElements(scores) {
-            player1ScoreElement.textContent = scores[1];
-            player2ScoreElement.textContent = scores[2];
-        }
-
+        // Switch to the next player
         function switchPlayer() {
-            currentPlayer = currentPlayer === 1 ? 2 : 1;
+            currentPlayer = currentPlayer === 1 ? 2 : 1; // Toggle between player 1 and player 2
+            updateTurnIndicator();
+        }
+
+        // Update the turn indicator on the screen
+        function updateTurnIndicator() {
             turnIndicator.textContent = `Player ${currentPlayer}'s turn`;
-            turnIndicator.classList.toggle('current-player');
-            update(ref(database, `/games/${gameId}`), { currentPlayer });
+            turnIndicator.classList.toggle('current-player', currentPlayer === 1); // Highlight current player
         }
 
-        function resetBoard() {
-            [firstCard, secondCard] = [null, null];
-            lockBoard = false;
-        }
-
-        function createGame() {
-            gameId = gameIdInput.value || `memory_game_${Date.now()}`;
-            const gameRef = ref(database, `/games/${gameId}`);
-            set(gameRef, { currentPlayer: 1, scores: { 1: 0, 2: 0 }, cards: {} }).then(() => {
-                playerNumber = 1;
-                startGame();
-            });
-        }
-
-        function joinGame() {
-            gameId = gameIdInput.value;
-            const gameRef = ref(database, `/games/${gameId}`);
-            get(gameRef).then((snapshot) => {
-                if (snapshot.exists()) {
-                    playerNumber = 2;
-                    const data = snapshot.val();
-                    currentPlayer = data.currentPlayer;
-                    updateScoreElements(data.scores);
-                    updateCardsFromDatabase(data.cards);
-                    startGame();
-                } else {
-                    alert('Invalid game ID');
-                }
-            });
-        }
-
-        function updateCardsFromDatabase(cards) {
-            Object.keys(cards).forEach((index) => {
-                const card = gameBoard.children[index];
-                card.classList.add('flipped');
-                card.querySelector('.front').style.transform = 'rotateY(180deg)';
-                card.querySelector('.back').style.transform = 'rotateY(0deg)';
-
-                if (cards[index].matched) {
-                    card.classList.add('matched');
-                    card.style.pointerEvents = 'none';
-                }
-            });
-        }
-
-        function startGame() {
-            if (!gameStarted) {
-                createBoard();
-                turnIndicator.classList.add('turn-indicator');
-                turnIndicator.classList.add('current-player');
-                gameStarted = true;
-                onValue(ref(database, `/games/${gameId}`), (snapshot) => {
-                    const data = snapshot.val();
-                    if (data) {
-                        currentPlayer = data.currentPlayer;
-                        updateScoreElements(data.scores);
-                        turnIndicator.textContent = `Player ${currentPlayer}'s turn`;
-                    }
-                });
+        // Update the score after a successful match
+        function updateScore() {
+            if (currentPlayer === 1) {
+                const player1Score = parseInt(player1ScoreElement.textContent) + 1;
+                player1ScoreElement.textContent = player1Score; // Increment player 1 score
+            } else {
+                const player2Score = parseInt(player2ScoreElement.textContent) + 1;
+                player2ScoreElement.textContent = player2Score; // Increment player 2 score
             }
         }
 
-        function resetGame() {
-            const gameRef = ref(database, `/games/${gameId}`);
-            set(gameRef, { currentPlayer: 1, scores: { 1: 0, 2: 0 }, cards: {} }).then(() => {
-                createBoard();
-                turnIndicator.classList.add('turn-indicator');
-                turnIndicator.classList.add('current-player');
-                turnIndicator.textContent = `Player 1's turn`;
-                updateScoreElements({ 1: 0, 2: 0 });
+        // Reset the first and second card variables for the next turn
+        function resetBoard() {
+            firstCard = null;
+            secondCard = null;
+            lockBoard = false;
+        }
+
+        // Initialize a new game
+        function initializeGame() {
+            createBoard();
+            player1ScoreElement.textContent = '0'; // Reset player 1 score
+            player2ScoreElement.textContent = '0'; // Reset player 2 score
+            gameStarted = true; // Set the game state to started
+            updateTurnIndicator();
+        }
+
+        // Create a new game instance in Firebase
+        createGameBtn.addEventListener('click', () => {
+            gameId = Math.random().toString(36).substr(2, 9); // Generate a unique game ID
+            const gameRef = ref(database, `games/${gameId}`);
+
+            // Set initial game state
+            set(gameRef, {
+                player1: { score: 0 },
+                player2: { score: 0 },
+                cards: Array(16).fill({ flipped: false, icon: null }) // Initialize cards
+            }).then(() => {
+                alert(`Game created! Your Game ID is: ${gameId}`);
+                initializeGame(); // Start the game
+            });
+        });
+
+        // Join an existing game
+        joinGameBtn.addEventListener('click', () => {
+            gameId = gameIdInput.value; // Get game ID from input
+            const gameRef = ref(database, `games/${gameId}`);
+
+            // Fetch the existing game state
+            get(gameRef).then(snapshot => {
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    player1ScoreElement.textContent = data.player1.score; // Set scores from DB
+                    player2ScoreElement.textContent = data.player2.score;
+                    initializeGame(); // Start the game
+                } else {
+                    alert("Game not found! Please check the Game ID.");
+                }
+            });
+        });
+
+        // Reset the game state
+        resetGameBtn.addEventListener('click', () => {
+            if (gameStarted) {
+                initializeGame(); // Reinitialize the game
+            }
+        });
+
+        // Listen for changes in the game state from Firebase
+        function listenForGameUpdates() {
+            const gameRef = ref(database, `games/${gameId}`);
+            onValue(gameRef, snapshot => {
+                const data = snapshot.val();
+                if (data) {
+                    player1ScoreElement.textContent = data.player1.score; // Update scores
+                    player2ScoreElement.textContent = data.player2.score;
+                    // Update cards based on the game state in Firebase
+                    updateCards(data.cards);
+                }
             });
         }
 
-        startGameBtn.addEventListener('click', startGame);
-        resetGameBtn.addEventListener('click', resetGame);
-        createGameBtn.addEventListener('click', createGame);
-        joinGameBtn.addEventListener('click', joinGame);
+        // Update the visual representation of the cards
+        function updateCards(cards) {
+            const cardElements = document.querySelectorAll('.card');
+            cards.forEach((cardData, index) => {
+                const cardElement = cardElements[index];
+                if (cardData.flipped) {
+                    cardElement.classList.add('flipped'); // Mark as flipped
+                    cardElement.querySelector('.front').style.transform = 'rotateY(180deg)';
+                    cardElement.querySelector('.back').style.transform = 'rotateY(0deg)';
+                } else {
+                    cardElement.classList.remove('flipped'); // Reset if not flipped
+                    cardElement.querySelector('.front').style.transform = 'rotateY(0deg)';
+                    cardElement.querySelector('.back').style.transform = 'rotateY(180deg)';
+                }
+            });
+        }
+
+        // Set up the game when the document is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            createGameBtn.disabled = false;
+            joinGameBtn.disabled = false;
+            resetGameBtn.disabled = true; // Disable reset until the game starts
+        });
     </script>
 </head>
 <body>
-    <div class="game-container" id="game-container">
+    <div class="game-container">
         <h1>Memory Card Game</h1>
         <div class="scoreboard">
             <div>Player 1 Score: <span id="player1-score">0</span></div>
             <div>Player 2 Score: <span id="player2-score">0</span></div>
         </div>
+        <div class="turn-indicator" id="turn-indicator">Player 1's turn</div>
         <div class="game-board" id="game-board"></div>
-        <div class="turn-indicator" id="turn-indicator">Connecting...</div>
         <div class="controls">
-            <button id="start-game-btn">Start Game</button>
-            <button id="reset-game-btn">Reset Game</button>
-            <input type="text" id="game-id-input" placeholder="Enter Game ID">
             <button id="create-game-btn">Create Game</button>
             <button id="join-game-btn">Join Game</button>
+            <input type="text" id="game-id-input" placeholder="Enter Game ID" />
+            <button id="reset-game-btn">Reset Game</button>
         </div>
     </div>
 </body>
