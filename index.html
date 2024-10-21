@@ -201,12 +201,19 @@
         function flipCard(card) {
             if (lockBoard || card.classList.contains('flipped') || card.classList.contains('matched')) return;
 
+            // Disable all other cards during the flip animation
+            lockBoard = true;
+
             card.classList.add('flipped');
             card.querySelector('.front').style.transform = 'rotateY(180deg)';
             card.querySelector('.back').style.transform = 'rotateY(0deg)';
 
+            // Update the game state in the database
+            updateGameState(card);
+
             if (!firstCard) {
                 firstCard = card;
+                lockBoard = false;
                 return;
             }
 
@@ -214,27 +221,51 @@
             checkForMatch();
         }
 
-        function checkForMatch() {
-            lockBoard = true;
+        function updateGameState(card) {
+            const gameRef = ref(database, `/games/${gameId}/cards`);
+            const cardIndex = card.dataset.index;
+            const updatedCards = {
+                [cardIndex]: {
+                    flipped: true,
+                    icon: card.dataset.icon
+                }
+            };
 
+            update(gameRef, updatedCards).then(() => {
+                // Unlock the board after the update is complete
+                lockBoard = false;
+            });
+        }
+
+        function checkForMatch() {
             if (firstCard.dataset.icon === secondCard.dataset.icon) {
-                firstCard.classList.add('matched');
-                secondCard.classList.add('matched');
+                matchCards(firstCard, secondCard);
                 updateScore();
                 resetBoard();
             } else {
                 setTimeout(() => {
-                    firstCard.classList.remove('flipped');
-                    secondCard.classList.remove('flipped');
-                    firstCard.querySelector('.front').style.transform = 'rotateY(0deg)';
-                    firstCard.querySelector('.back').style.transform = 'rotateY(180deg)';
-                    secondCard.querySelector('.front').style.transform = 'rotateY(0deg)';
-                    secondCard.querySelector('.back').style.transform = 'rotateY(180deg)';
+                    unflipCards(firstCard, secondCard);
                     resetBoard();
                 }, 1000);
             }
 
             switchPlayer();
+        }
+
+        function matchCards(card1, card2) {
+            card1.classList.add('matched');
+            card2.classList.add('matched');
+            card1.style.pointerEvents = 'none';
+            card2.style.pointerEvents = 'none';
+        }
+
+        function unflipCards(card1, card2) {
+            card1.classList.remove('flipped');
+            card2.classList.remove('flipped');
+            card1.querySelector('.front').style.transform = 'rotateY(0deg)';
+            card1.querySelector('.back').style.transform = 'rotateY(180deg)';
+            card2.querySelector('.front').style.transform = 'rotateY(0deg)';
+            card2.querySelector('.back').style.transform = 'rotateY(180deg)';
         }
 
         function updateScore() {
@@ -269,7 +300,7 @@
         function createGame() {
             gameId = gameIdInput.value || `memory_game_${Date.now()}`;
             const gameRef = ref(database, `/games/${gameId}`);
-            set(gameRef, { currentPlayer: 1, scores: { 1: 0, 2: 0 } }).then(() => {
+            set(gameRef, { currentPlayer: 1, scores: { 1: 0, 2: 0 }, cards: {} }).then(() => {
                 playerNumber = 1;
                 startGame();
             });
@@ -284,9 +315,24 @@
                     const data = snapshot.val();
                     currentPlayer = data.currentPlayer;
                     updateScoreElements(data.scores);
+                    updateCardsFromDatabase(data.cards);
                     startGame();
                 } else {
                     alert('Invalid game ID');
+                }
+            });
+        }
+
+        function updateCardsFromDatabase(cards) {
+            Object.keys(cards).forEach((index) => {
+                const card = gameBoard.children[index];
+                card.classList.add('flipped');
+                card.querySelector('.front').style.transform = 'rotateY(180deg)';
+                card.querySelector('.back').style.transform = 'rotateY(0deg)';
+
+                if (cards[index].matched) {
+                    card.classList.add('matched');
+                    card.style.pointerEvents = 'none';
                 }
             });
         }
@@ -310,7 +356,7 @@
 
         function resetGame() {
             const gameRef = ref(database, `/games/${gameId}`);
-            set(gameRef, { currentPlayer: 1, scores: { 1: 0, 2: 0 } }).then(() => {
+            set(gameRef, { currentPlayer: 1, scores: { 1: 0, 2: 0 }, cards: {} }).then(() => {
                 createBoard();
                 turnIndicator.classList.add('turn-indicator');
                 turnIndicator.classList.add('current-player');
