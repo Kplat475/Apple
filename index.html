@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Card Game</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f5f5f5;
+            margin: 0;
+            height: 100vh;
+            justify-content: center;
+        }
+
+        .game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(4, 100px);
+            grid-template-rows: repeat(4, 150px);
+            gap: 1rem;
+        }
+
+        .card {
+            background-color: #4caf50;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 3rem;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: transform 0.3s, background-color 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card.flipped {
+            background-color: #fff;
+            color: #333;
+            transform: rotateY(180deg);
+        }
+
+        .card.matched {
+            background-color: #2e7d32;
+            pointer-events: none;
+        }
+
+        .card .front,
+        .card .back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            backface-visibility: hidden;
+            transition: transform 0.3s;
+        }
+
+        .card .front {
+            transform: rotateY(0deg);
+        }
+
+        .card .back {
+            transform: rotateY(180deg);
+        }
+
+        .scoreboard {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .turn-indicator {
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            background-color: #4caf50;
+            color: #fff;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .current-player {
+            background-color: #2e7d32;
+        }
+
+        .controls {
+            margin-top: 1.5rem;
+        }
+
+        .controls button {
+            margin: 0 0.5rem;
+            padding: 0.5rem 1rem;
+            background-color: #4caf50;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .controls button:hover {
+            background-color: #2e7d32;
+        }
+
+        @media (max-width: 768px) {
+            .game-board {
+                grid-template-columns: repeat(4, 80px);
+                grid-template-rows: repeat(4, 120px);
+            }
+        }
+    </style>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+        import { getDatabase, ref, set, get, onValue, update } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAoyLo0Cf3VfUi0uqqAYWanJQEC0b-JUO4",
+            authDomain: "okmew-72293.firebaseapp.com",
+            databaseURL: "https://okmew-72293-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "okmew-72293",
+            storageBucket: "okmew-72293.appspot.com",
+            messagingSenderId: "329786787304",
+            appId: "1:329786787304:web:b71057df20e1d3079f505d"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        const gameIcons = ['🐶', '🐱', '🐴', '🐟', '🕷️', '🐸', '🦛', '🦜'];
+
+        let gameId;
+        let playerNumber;
+        let currentPlayer = 1;
+        let firstCard = null;
+        let secondCard = null;
+        let lockBoard = false;
+        let gameStarted = false;
+
+        const gameContainer = document.getElementById('game-container');
+        const gameBoard = document.getElementById('game-board');
+        const turnIndicator = document.getElementById('turn-indicator');
+        const player1ScoreElement = document.getElementById('player1-score');
+        const player2ScoreElement = document.getElementById('player2-score');
+        const createGameBtn = document.getElementById('create-game-btn');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        const startGameBtn = document.getElementById('start-game-btn');
+        const resetGameBtn = document.getElementById('reset-game-btn');
+        const gameIdInput = document.getElementById('game-id-input');
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function createBoard() {
+            shuffle(gameIcons);
+            gameBoard.innerHTML = '';
+
+            gameIcons.forEach((icon, index) => {
+                const card = document.createElement('div');
+                card.classList.add('card');
+                card.dataset.index = index;
+                card.dataset.icon = icon;
+
+                const front = document.createElement('div');
+                front.classList.add('front');
+                front.textContent = '🐶';
+
+                const back = document.createElement('div');
+                back.classList.add('back');
+                back.textContent = icon;
+
+                card.appendChild(front);
+                card.appendChild(back);
+                card.addEventListener('click', () => flipCard(card));
+                gameBoard.appendChild(card);
+            });
+        }
+
+        function flipCard(card) {
+            if (lockBoard || card.classList.contains('flipped') || card.classList.contains('matched')) return;
+
+            card.classList.add('flipped');
+            card.querySelector('.front').style.transform = 'rotateY(180deg)';
+            card.querySelector('.back').style.transform = 'rotateY(0deg)';
+
+            if (!firstCard) {
+                firstCard = card;
+                return;
+            }
+
+            secondCard = card;
+            checkForMatch();
+        }
+
+        function checkForMatch() {
+            lockBoard = true;
+
+            if (firstCard.dataset.icon === secondCard.dataset.icon) {
+                firstCard.classList.add('matched');
+                secondCard.classList.add('matched');
+                updateScore();
+                resetBoard();
+            } else {
+                setTimeout(() => {
+                    firstCard.classList.remove('flipped');
+                    secondCard.classList.remove('flipped');
+                    firstCard.querySelector('.front').style.transform = 'rotateY(0deg)';
+                    firstCard.querySelector('.back').style.transform = 'rotateY(180deg)';
+                    secondCard.querySelector('.front').style.transform = 'rotateY(0deg)';
+                    secondCard.querySelector('.back').style.transform = 'rotateY(180deg)';
+                    resetBoard();
+                }, 1000);
+            }
+
+            switchPlayer();
+        }
+
+        function updateScore() {
+            const scoreRef = ref(database, `/games/${gameId}/scores`);
+            get(scoreRef).then((snapshot) => {
+                if (snapshot.exists()) {
+                    let scores = snapshot.val();
+                    scores[currentPlayer] += 1;
+                    update(scoreRef, scores);
+                    updateScoreElements(scores);
+                }
+            });
+        }
+
+        function updateScoreElements(scores) {
+            player1ScoreElement.textContent = scores[1];
+            player2ScoreElement.textContent = scores[2];
+        }
+
+        function switchPlayer() {
+            currentPlayer = currentPlayer === 1 ? 2 : 1;
+            turnIndicator.textContent = `Player ${currentPlayer}'s turn`;
+            turnIndicator.classList.toggle('current-player');
+            update(ref(database, `/games/${gameId}`), { currentPlayer });
+        }
+
+        function resetBoard() {
+            [firstCard, secondCard] = [null, null];
+            lockBoard = false;
+        }
+
+        function createGame() {
+            gameId = gameIdInput.value || `memory_game_${Date.now()}`;
+            const gameRef = ref(database, `/games/${gameId}`);
+            set(gameRef, { currentPlayer: 1, scores: { 1: 0, 2: 0 } }).then(() => {
+                playerNumber = 1;
+                startGame();
+            });
+        }
+
+        function joinGame() {
+            gameId = gameIdInput.value;
+            const gameRef = ref(database, `/games/${gameId}`);
+            get(gameRef).then((snapshot) => {
+                if (snapshot.exists()) {
+                    playerNumber = 2;
+                    const data = snapshot.val();
+                    currentPlayer = data.currentPlayer;
+                    updateScoreElements(data.scores);
+                    startGame();
+                } else {
+                    alert('Invalid game ID');
+                }
+            });
+        }
+
+        function startGame() {
+            if (!gameStarted) {
+                createBoard();
+                turnIndicator.classList.add('turn-indicator');
+                turnIndicator.classList.add('current-player');
+                gameStarted = true;
+                onValue(ref(database, `/games/${gameId}`), (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        currentPlayer = data.currentPlayer;
+                        updateScoreElements(data.scores);
+                        turnIndicator.textContent = `Player ${currentPlayer}'s turn`;
+                    }
+                });
+            }
+        }
+
+        function resetGame() {
+            const gameRef = ref(database, `/games/${gameId}`);
+            set(gameRef, { currentPlayer: 1, scores: { 1: 0, 2: 0 } }).then(() => {
+                createBoard();
+                turnIndicator.classList.add('turn-indicator');
+                turnIndicator.classList.add('current-player');
+                turnIndicator.textContent = `Player 1's turn`;
+                updateScoreElements({ 1: 0, 2: 0 });
+            });
+        }
+
+        startGameBtn.addEventListener('click', startGame);
+        resetGameBtn.addEventListener('click', resetGame);
+        createGameBtn.addEventListener('click', createGame);
+        joinGameBtn.addEventListener('click', joinGame);
+    </script>
+</head>
+<body>
+    <div class="game-container" id="game-container">
+        <h1>Memory Card Game</h1>
+        <div class="scoreboard">
+            <div>Player 1 Score: <span id="player1-score">0</span></div>
+            <div>Player 2 Score: <span id="player2-score">0</span></div>
+        </div>
+        <div class="game-board" id="game-board"></div>
+        <div class="turn-indicator" id="turn-indicator">Connecting...</div>
+        <div class="controls">
+            <button id="start-game-btn">Start Game</button>
+            <button id="reset-game-btn">Reset Game</button>
+            <input type="text" id="game-id-input" placeholder="Enter Game ID">
+            <button id="create-game-btn">Create Game</button>
+            <button id="join-game-btn">Join Game</button>
+        </div>
+    </div>
+</body>
+</html>
